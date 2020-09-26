@@ -4,11 +4,16 @@ import sys
 import getopt
 import re
 
-config = {
-	"targetIp": "", 
-	"targetPort": "",
-	"targetPortRange": []
-}
+config = {"targetIp": "", "targetPort": "", "targetPortRange": []}
+ports = []
+
+
+class colors:
+	GREEN = '\033[92m'
+	RED = '\033[91m'
+	BOLD = '\033[1m'
+	END = '\033[0m'
+
 
 def printUsage():
 	'prints usage info'
@@ -21,19 +26,33 @@ def printUsage():
 	It is not possible to have both -p and -P flags."""
 	print(help)
 
+
 def checkPort(host, port):
 	"checks if a port is open or not"
-	socket.setdefaulttimeout(0.15)
+	socket.setdefaulttimeout(0.05)
 	s = socket.socket()
 	res = s.connect_ex((host, port))
 	s.close()
 	return res
 
+
+def printResult():
+	"prints the results array of scanned ports"
+	found = False
+	for i in range(len(ports)):
+		if ports[i]["status"] == 0:
+			found = True
+			print("port", ports[i]["port"],
+				  "is " + colors.BOLD + colors.GREEN + "OPEN" + colors.END)
+
+	if not found:
+		print(colors.RED + "No open ports found!" + colors.END)
+
 def main(argv):
 	start = time.time()
 	try:
-		opts, _ = getopt.getopt(
-			argv, "hi:p:P:", ["ip=", "port=", "portRange="])
+		opts, _ = getopt.getopt(argv, "hi:p:P:",
+								["ip=", "port=", "portRange="])
 	except getopt.GetoptError:
 		printUsage()
 		sys.exit(2)
@@ -66,19 +85,31 @@ def main(argv):
 		printUsage()
 		print("\nNo IP provided. Exiting..")
 		sys.exit(1)
-	if  bool(re.match(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", config["targetIp"])) != True:
+	if bool(re.match(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$",
+					 config["targetIp"])) != True:
 		printUsage()
 		print("\nInvalid IP provided. Exiting..")
 		sys.exit(1)
 	if config["targetPort"] != '' and config["targetPortRange"] != []:
 		printUsage()
-		print("\nYou cannot use both --port and --portRange arguments at the same time. Exiting..")
+		print(
+			"\nYou cannot use both --port and --portRange arguments at the same time. Exiting.."
+		)
 		sys.exit(1)
-	if config["targetPort"] != '' and (isinstance(config["targetPort"], int) != True or int(config["targetPort"]) not in range(65535)):
+	if config["targetPort"] != '' and (
+			isinstance(config["targetPort"], int) != True
+			or int(config["targetPort"]) not in range(65535)):
 		printUsage()
 		print("\nInvalid Port number provided. Exiting..")
 		sys.exit(1)
-	if len(config["targetPortRange"]) != 0 and (len(config["targetPortRange"]) < 2 or len(config["targetPortRange"]) > 2 or  not isinstance(config["targetPortRange"][0], int) or not isinstance(config["targetPortRange"][1], int) or config["targetPortRange"][0]>=config["targetPortRange"][1] or config["targetPortRange"][0] not in range (65535) or config["targetPortRange"][1] not in range(65535)):
+	if len(config["targetPortRange"]) != 0 and (
+			len(config["targetPortRange"]) < 2
+			or len(config["targetPortRange"]) > 2
+			or not isinstance(config["targetPortRange"][0], int)
+			or not isinstance(config["targetPortRange"][1], int)
+			or config["targetPortRange"][0] >= config["targetPortRange"][1]
+			or config["targetPortRange"][0] not in range(65535)
+			or config["targetPortRange"][1] not in range(65535)):
 		printUsage()
 		print("\nInvalid port range provided. Exiting..")
 		sys.exit(1)
@@ -86,28 +117,29 @@ def main(argv):
 	# start scanning
 	if config["targetPort"] != '':
 		res = checkPort(config["targetIp"], int(config["targetPort"]))
-		if res == 0:
-			print("port", config["targetPort"], " is open on", config["targetIp"])
-		else:
-			print("port", config["targetPort"], "is closed on", config["targetIp"])
-		end = time.time()
-		print("Scan lasted:", end - start, "seconds")
-	elif len(config["targetPortRange"])>0:
-		for p in range(config["targetPortRange"][0], config["targetPortRange"][1]+1):
+		ports.append({"port": config["targetPort"], "status": res})
+	elif len(config["targetPortRange"]) > 0:
+		numberOfPortsToScan = config["targetPortRange"][1] - config[
+			"targetPortRange"][0]
+		counter = 0
+		for p in range(config["targetPortRange"][0],
+					   config["targetPortRange"][1] + 1):
+			print("Progress: {}/{}".format(counter, numberOfPortsToScan),
+				  end="\r",
+				  flush=True)
 			res = checkPort(config["targetIp"], p)
-			print(p, res)
-			if res == 0:
-				print("port", p, " is open")
-		end = time.time()
-		print("Scan duration:", end - start, "seconds")
+			ports.append({"port": p, "status": res})
+			counter += 1
 	else:
 		for p in range(65535):
+			print("Progress: {}/{}".format(p, 65535), end="\r", flush=True)
 			res = checkPort(config["targetIp"], p)
-			print(p, res)
-			if res == 0:
-				print("port", p, " is open")
-		end = time.time()
-		print("Scan duration:", end - start, "seconds")
+			ports.append({"port": p, "status": res})
+	print("\n")
+	printResult()
+	end = time.time()
+	print("Scan duration:", end - start, "seconds")
+
 
 if __name__ == "__main__":
-   main(sys.argv[1:])
+	main(sys.argv[1:])
